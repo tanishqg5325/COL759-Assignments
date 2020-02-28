@@ -161,11 +161,13 @@ string secretKey::decrypt(string cipherText, int a) const {
 
 pair<publicKey, secretKey> generateKey(int bit_length) {
     mpz_class p = generateStrongPrime(bit_length), q = generateStrongPrime(bit_length);
-    // insert a while loop till abs(p-q) < threshold
+    mpz_class threshold;
+    mpz_ui_pow_ui(threshold.get_mpz_t(), 2, 4 * bit_length);
+    while(abs(p - q) < threshold) q = generateStrongPrime(bit_length);
     mpz_class n = p * q, phi_n = (p - 1) * (q - 1), d, e;
     // n has size nearly 8 * bit_length
     mpz_urandomb(e.get_mpz_t(), state, bit_length);
-    while(gcd(e, phi_n) != 1) mpz_urandomb(e.get_mpz_t(), state, 50);
+    while(gcd(e, phi_n) != 1) mpz_urandomb(e.get_mpz_t(), state, bit_length);
     mpz_invert(d.get_mpz_t(), e.get_mpz_t(), phi_n.get_mpz_t());
     return {publicKey(n, e), secretKey(p, q, d)};
 }
@@ -201,7 +203,7 @@ public:
 
 User::User(int id) {
     this->id = id;
-    pair<publicKey, secretKey> key = generateKey(50);
+    pair<publicKey, secretKey> key = generateKey(128);
     this->pk = key.first;
     this->sk = key.second;
     CA->registerUser(*this);
@@ -235,7 +237,7 @@ string User::decrypt(pair<string, string> message, int a_id) const {
 }
 
 CertificateAuthority::CertificateAuthority() {
-    pair<publicKey, secretKey> key = generateKey(100);
+    pair<publicKey, secretKey> key = generateKey(200);
     this->pk = key.first;
     this->sk = key.second;
 }
@@ -265,7 +267,7 @@ int main() {
     gmp_randseed_ui(state, time(0));
     CA = new CertificateAuthority();
     User a(123), b(256);
-    string vignereKey = "abcdefghijklmno";
+    string vignereKey = "afeshadfkaklnljabvlbdfsn";
     a.setVignereKey(vignereKey); b.setVignereKey(vignereKey);
     string msg; cin >> msg;
     pair<string, string> c = a.encrypt(msg, b.getID());
