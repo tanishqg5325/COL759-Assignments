@@ -178,12 +178,14 @@ class User {
     int id;         // identity of user
     publicKey pk;   // public key
     secretKey sk;   // secret key
+    string vignereKey;
 public:
     User(int);
     int getID() const;
     publicKey getPublicKey() const;
-    string encrypt(string, User) const;
-    string decrypt(string, User) const; 
+    void setVignereKey(string);
+    pair<string, string> encrypt(string, User) const;
+    string decrypt(pair<string, string>, User) const;
 };
 
 
@@ -238,20 +240,31 @@ User::User(int id) {
 
 int User::getID() const {return id;}
 
+void User::setVignereKey(string key) {vignereKey = key;}
+
 publicKey User::getPublicKey() const {return pk;}
 
-string User::encrypt(string message, User b) const {
+pair<string, string> User::encrypt(string message, User b) const {
     publicKey pkCA = CA->getPublicKey();
     publicKey pkb = CA->getPublicKeyOfUser(b.getID());
     publicKey pkb_actual(pkCA.encrypt(pkb.get_n()), pkCA.encrypt(pkb.get_e()));
-    return pkb_actual.encrypt(sk.decrypt(message, 0), 0);
+    return {
+        pkb_actual.encrypt(sk.decrypt(message, 0), 0), 
+        pkb_actual.encrypt(sk.decrypt(vignereKey, 0), 0)
+    };
 }
 
-string User::decrypt(string message, User a) const {
+string User::decrypt(pair<string, string> message, User a) const {
     publicKey pkCA = CA->getPublicKey();
     publicKey pka = CA->getPublicKeyOfUser(a.getID());
     publicKey pka_actual(pkCA.encrypt(pka.get_n()), pkCA.encrypt(pka.get_e()));
-    return pka_actual.encrypt(sk.decrypt(message, 1), 1);
+    string decryptedVignereKey = pka_actual.encrypt(sk.decrypt(message.second, 1), 1);
+    string originalVignereKey = vignereKey + string(decryptedVignereKey.size()-vignereKey.size(), 'x');
+    if(decryptedVignereKey != originalVignereKey) {
+        cout << "Something is wrong\n";
+        return NULL;
+    }
+    return pka_actual.encrypt(sk.decrypt(message.first, 1), 1);
 }
 
 int main() {
@@ -259,8 +272,10 @@ int main() {
     gmp_randseed_ui(state, time(0));
     CA = new CertificateAuthority();
     User a(123), b(256);
+    string vignereKey = "dgsefgfhrtrdgjhrtsgnbjasbdobsogf";
+    a.setVignereKey(vignereKey); b.setVignereKey(vignereKey);
     string msg; cin>>msg;
-    string c = a.encrypt(msg, b);
+    pair<string, string> c = a.encrypt(msg, b);
     cout << b.decrypt(c, a) << "\n";
     c = b.encrypt(msg, a);
     cout<< a.decrypt(c, b) << "\n";
