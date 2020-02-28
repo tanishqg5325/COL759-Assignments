@@ -31,6 +31,7 @@ mpz_class generateStrongPrime(int bit_length) {
     mpz_urandomb(j.get_mpz_t(), state, bit_length);
     p = p0 + 2 * j * r * s;
     while(mpz_probab_prime_p(p.get_mpz_t(), 50) == 0) p += 2 * r * s;
+    // p nearly of size 4 * bit_length
     return p;
 }
 
@@ -59,8 +60,7 @@ class publicKey {
 public:
     publicKey() {}
     publicKey(mpz_class n, mpz_class e) {
-        this->n = n;
-        this->e = e;
+        this->n = n; this->e = e;
     }
     mpz_class get_n() const {return n;}
     mpz_class get_e() const {return e;}
@@ -73,13 +73,8 @@ class secretKey {
 public:
     secretKey() {}
     secretKey(mpz_class p, mpz_class q, mpz_class d) {
-        this->p = p;
-        this->q = q;
-        this->d = d;
+        this->p = p; this->q = q; this->d = d;
     }
-    mpz_class get_p() const {return p;}
-    mpz_class get_q() const {return q;}
-    mpz_class get_d() const {return d;}
     mpz_class powerCRT(mpz_class) const;
     string decrypt(string, int) const;
     mpz_class decrypt(mpz_class) const;
@@ -123,15 +118,25 @@ int getBlockSize(mpz_class n) {
     return r-1;
 }
 
+string preProcess(string message, int blockSize) {
+    int pos = -1;
+    for(int i=message.size()-1;i>=0;i--)
+        if(message[i] != 'x')
+            {pos = i; break;}
+    int new_n = ((pos + blockSize) / blockSize) * blockSize;
+    return message.substr(0, new_n);
+}
+
 string publicKey::encrypt(string plainText, int a) const {
     int blockSize = getBlockSize(n);
+    if(a == 1) plainText = preProcess(plainText, blockSize+a);
     string cipherText = "";
     for(int i=0;i<plainText.size();i+=blockSize+a) {
         mpz_class M = 0, tmp;
         for(int j=i;j<i+blockSize+a;j++) {
             M *= 26;
             if(j < plainText.size()) M += plainText[j] - 'a';
-            else M += 'x' - 'a';
+            else {assert(a == 0); M += 'x' - 'a';}
         }
         mpz_powm(M.get_mpz_t(), M.get_mpz_t(), e.get_mpz_t(), n.get_mpz_t());
         for(int j=0;j<blockSize+1-a;j++) {
@@ -256,6 +261,8 @@ int main() {
     User a(123), b(256);
     string msg; cin>>msg;
     string c = a.encrypt(msg, b);
-    cout<<b.decrypt(c, a)<<"\n";
+    cout << b.decrypt(c, a) << "\n";
+    c = b.encrypt(msg, a);
+    cout<< a.decrypt(c, b) << "\n";
     return 0;
 }
