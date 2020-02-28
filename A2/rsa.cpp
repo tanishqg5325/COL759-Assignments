@@ -1,15 +1,11 @@
 #include <bits/stdc++.h>
 #include <gmpxx.h>
 
-/*
- * TODO:
- * integrate vignere cipher
- * Larger Primes
- */
-
 using namespace std;
 
 gmp_randstate_t state;
+
+/*/------------------Functions to generate Primes and Strong Primes-------------------/*/
 
 mpz_class generate_prime(int bit_length) {
     mpz_class p;
@@ -35,6 +31,8 @@ mpz_class generateStrongPrime(int bit_length) {
     return p;
 }
 
+/*/-------------------Encryption and Decryption using Vignere Cipher------------------/*/
+
 string encryptVignere(string plainText, string key) {
     string cipherText = ""; int m_size = plainText.size(), k_size = key.size();
     char c;
@@ -55,61 +53,7 @@ string decryptVignere(string cipherText, string key) {
     return plainText;
 }
 
-class publicKey {
-    mpz_class n, e;
-public:
-    publicKey() {}
-    publicKey(mpz_class n, mpz_class e) {
-        this->n = n; this->e = e;
-    }
-    mpz_class get_n() const {return n;}
-    mpz_class get_e() const {return e;}
-    string encrypt(string, int) const;
-    mpz_class encrypt(mpz_class) const;
-};
-
-class secretKey {
-    mpz_class p, q, d;
-public:
-    secretKey() {}
-    secretKey(mpz_class p, mpz_class q, mpz_class d) {
-        this->p = p; this->q = q; this->d = d;
-    }
-    mpz_class powerCRT(mpz_class) const;
-    string decrypt(string, int) const;
-    mpz_class decrypt(mpz_class) const;
-};
-
-pair<publicKey, secretKey> generateKey(int bit_length) {
-    mpz_class p = generateStrongPrime(bit_length), q = generateStrongPrime(bit_length);
-    // insert a while loop till abs(p-q) < threshold
-    mpz_class n = p * q, phi_n = (p - 1) * (q - 1), d, e;
-    // n has size nearly 8 * bit_length
-    mpz_urandomb(e.get_mpz_t(), state, bit_length);
-    while(gcd(e, phi_n) != 1) mpz_urandomb(e.get_mpz_t(), state, 50);
-    mpz_invert(d.get_mpz_t(), e.get_mpz_t(), phi_n.get_mpz_t());
-    return {publicKey(n, e), secretKey(p, q, d)};
-}
-
-mpz_class secretKey::powerCRT(mpz_class m) const {
-    mpz_class mp = m % p, mq = m % q;
-    mpz_powm(mp.get_mpz_t(), mp.get_mpz_t(), d.get_mpz_t(), p.get_mpz_t());
-    mpz_powm(mq.get_mpz_t(), mq.get_mpz_t(), d.get_mpz_t(), q.get_mpz_t());
-    mpz_class p_1, q_1;
-    mpz_invert(p_1.get_mpz_t(), p.get_mpz_t(), q.get_mpz_t());
-    mpz_invert(q_1.get_mpz_t(), q.get_mpz_t(), p.get_mpz_t());
-    return (mp * q * q_1 + mq * p * p_1) % (p * q);
-}
-
-mpz_class publicKey::encrypt(mpz_class m) const {
-    mpz_class ans;
-    mpz_powm(ans.get_mpz_t(), m.get_mpz_t(), e.get_mpz_t(), n.get_mpz_t());
-    return ans;
-}
-
-mpz_class secretKey::decrypt(mpz_class m) const {
-    return powerCRT(m);
-}
+/*/-------------------------------Helper Functions------------------------------------/*/
 
 int getBlockSize(mpz_class n) {
     int r = 0;
@@ -127,6 +71,19 @@ string preProcess(string message, int blockSize) {
     return message.substr(0, new_n);
 }
 
+/*/------------------------------Public Key Class-----------------------------------/*/
+
+class publicKey {
+    mpz_class n, e;
+public:
+    publicKey() {}
+    publicKey(mpz_class n, mpz_class e) : n(n), e(e) {}
+    mpz_class get_n() const {return n;}
+    mpz_class get_e() const {return e;}
+    string encrypt(string, int) const;
+    mpz_class encrypt(mpz_class) const;
+};
+
 string publicKey::encrypt(string plainText, int a) const {
     int blockSize = getBlockSize(n);
     if(a == 1) plainText = preProcess(plainText, blockSize+a);
@@ -136,7 +93,7 @@ string publicKey::encrypt(string plainText, int a) const {
         for(int j=i;j<i+blockSize+a;j++) {
             M *= 26;
             if(j < plainText.size()) M += plainText[j] - 'a';
-            else {assert(a == 0); M += 'x' - 'a';}
+            else M += 'x' - 'a';
         }
         mpz_powm(M.get_mpz_t(), M.get_mpz_t(), e.get_mpz_t(), n.get_mpz_t());
         for(int j=0;j<blockSize+1-a;j++) {
@@ -146,6 +103,34 @@ string publicKey::encrypt(string plainText, int a) const {
         }
     }
     return cipherText;
+}
+
+mpz_class publicKey::encrypt(mpz_class m) const {
+    mpz_class ans;
+    mpz_powm(ans.get_mpz_t(), m.get_mpz_t(), e.get_mpz_t(), n.get_mpz_t());
+    return ans;
+}
+
+/*/------------------------------Secret Key Class-----------------------------------/*/
+
+class secretKey {
+    mpz_class p, q, d;
+public:
+    secretKey() {}
+    secretKey(mpz_class p, mpz_class q, mpz_class d) : p(p), q(q), d(d) {}
+    mpz_class powerCRT(mpz_class) const;
+    string decrypt(string, int) const;
+    mpz_class decrypt(mpz_class m) const {return powerCRT(m);}
+};
+
+mpz_class secretKey::powerCRT(mpz_class m) const {
+    mpz_class mp = m % p, mq = m % q;
+    mpz_powm(mp.get_mpz_t(), mp.get_mpz_t(), d.get_mpz_t(), p.get_mpz_t());
+    mpz_powm(mq.get_mpz_t(), mq.get_mpz_t(), d.get_mpz_t(), q.get_mpz_t());
+    mpz_class p_1, q_1;
+    mpz_invert(p_1.get_mpz_t(), p.get_mpz_t(), q.get_mpz_t());
+    mpz_invert(q_1.get_mpz_t(), q.get_mpz_t(), p.get_mpz_t());
+    return (mp * q * q_1 + mq * p * p_1) % (p * q);
 }
 
 string secretKey::decrypt(string cipherText, int a) const {
@@ -172,7 +157,22 @@ string secretKey::decrypt(string cipherText, int a) const {
     return plainText;
 }
 
-class CertificateAuthority;
+/*/---------------------------Function to generate Key--------------------------------/*/
+
+pair<publicKey, secretKey> generateKey(int bit_length) {
+    mpz_class p = generateStrongPrime(bit_length), q = generateStrongPrime(bit_length);
+    // insert a while loop till abs(p-q) < threshold
+    mpz_class n = p * q, phi_n = (p - 1) * (q - 1), d, e;
+    // n has size nearly 8 * bit_length
+    mpz_urandomb(e.get_mpz_t(), state, bit_length);
+    while(gcd(e, phi_n) != 1) mpz_urandomb(e.get_mpz_t(), state, 50);
+    mpz_invert(d.get_mpz_t(), e.get_mpz_t(), phi_n.get_mpz_t());
+    return {publicKey(n, e), secretKey(p, q, d)};
+}
+
+/*/---------------------Certification Authority and User Class-----------------------/*/
+
+class CertificationAuthority;
 
 class User {
     int id;         // identity of user
@@ -181,13 +181,12 @@ class User {
     string vignereKey;
 public:
     User(int);
-    int getID() const;
-    publicKey getPublicKey() const;
-    void setVignereKey(string);
-    pair<string, string> encrypt(string, User) const;
-    string decrypt(pair<string, string>, User) const;
+    int getID() const {return id;};
+    publicKey getPublicKey() const {return pk;}
+    void setVignereKey(string key) {vignereKey = key;}
+    pair<string, string> encrypt(string, int) const;
+    string decrypt(pair<string, string>, int) const;
 };
-
 
 class CertificateAuthority {
     map<int, publicKey> table;
@@ -195,10 +194,45 @@ class CertificateAuthority {
     secretKey sk;
 public:
     CertificateAuthority();
+    publicKey getPublicKey() const {return pk;};
     void registerUser(User u);
-    publicKey getPublicKey() const;
     publicKey getPublicKeyOfUser(int);
 } *CA;
+
+User::User(int id) {
+    this->id = id;
+    pair<publicKey, secretKey> key = generateKey(50);
+    this->pk = key.first;
+    this->sk = key.second;
+    CA->registerUser(*this);
+}
+
+pair<string, string> User::encrypt(string message, int b_id) const {
+    int blockSize = getBlockSize(pk.get_n());
+    if(message.size() % blockSize > 0)
+        message += string(blockSize - message.size() % blockSize, 'x');
+    publicKey pkCA = CA->getPublicKey();
+    publicKey pkb = CA->getPublicKeyOfUser(b_id);
+    publicKey pkb_actual(pkCA.encrypt(pkb.get_n()), pkCA.encrypt(pkb.get_e()));
+    message = encryptVignere(message, vignereKey);
+    return {
+        pkb_actual.encrypt(sk.decrypt(message, 0), 0), 
+        pkb_actual.encrypt(sk.decrypt(vignereKey, 0), 0)
+    };
+}
+
+string User::decrypt(pair<string, string> message, int a_id) const {
+    publicKey pkCA = CA->getPublicKey();
+    publicKey pka = CA->getPublicKeyOfUser(a_id);
+    publicKey pka_actual(pkCA.encrypt(pka.get_n()), pkCA.encrypt(pka.get_e()));
+    string decryptedVignereKey = pka_actual.encrypt(sk.decrypt(message.second, 1), 1);
+    string originalVignereKey = vignereKey + string(decryptedVignereKey.size()-vignereKey.size(), 'x');
+    if(decryptedVignereKey != originalVignereKey) {
+        cout << "Something is wrong !!\n";
+        exit(0);
+    }
+    return decryptVignere(pka_actual.encrypt(sk.decrypt(message.first, 1), 1), vignereKey);
+}
 
 CertificateAuthority::CertificateAuthority() {
     pair<publicKey, secretKey> key = generateKey(100);
@@ -209,19 +243,15 @@ CertificateAuthority::CertificateAuthority() {
 void CertificateAuthority::registerUser(User u) {
     if(table.find(u.getID()) != table.end()) {
         throw "This ID is already with another user !";
+        exit(0);
     }
-    else {
-        table[u.getID()] = u.getPublicKey();
-    }
-}
-
-publicKey CertificateAuthority::getPublicKey() const {
-    return pk;
+    else table[u.getID()] = u.getPublicKey();
 }
 
 publicKey CertificateAuthority::getPublicKeyOfUser(int id) {
     if(table.find(id) == table.end()) {
         throw "No such user !";
+        exit(0);
     }
     else {
         publicKey pkU = table[id];
@@ -230,54 +260,17 @@ publicKey CertificateAuthority::getPublicKeyOfUser(int id) {
     }
 }
 
-User::User(int id) {
-    this->id = id;
-    pair<publicKey, secretKey> key = generateKey(50);
-    this->pk = key.first;
-    this->sk = key.second;
-    CA->registerUser(*this);
-}
-
-int User::getID() const {return id;}
-
-void User::setVignereKey(string key) {vignereKey = key;}
-
-publicKey User::getPublicKey() const {return pk;}
-
-pair<string, string> User::encrypt(string message, User b) const {
-    publicKey pkCA = CA->getPublicKey();
-    publicKey pkb = CA->getPublicKeyOfUser(b.getID());
-    publicKey pkb_actual(pkCA.encrypt(pkb.get_n()), pkCA.encrypt(pkb.get_e()));
-    return {
-        pkb_actual.encrypt(sk.decrypt(message, 0), 0), 
-        pkb_actual.encrypt(sk.decrypt(vignereKey, 0), 0)
-    };
-}
-
-string User::decrypt(pair<string, string> message, User a) const {
-    publicKey pkCA = CA->getPublicKey();
-    publicKey pka = CA->getPublicKeyOfUser(a.getID());
-    publicKey pka_actual(pkCA.encrypt(pka.get_n()), pkCA.encrypt(pka.get_e()));
-    string decryptedVignereKey = pka_actual.encrypt(sk.decrypt(message.second, 1), 1);
-    string originalVignereKey = vignereKey + string(decryptedVignereKey.size()-vignereKey.size(), 'x');
-    if(decryptedVignereKey != originalVignereKey) {
-        cout << "Something is wrong\n";
-        return NULL;
-    }
-    return pka_actual.encrypt(sk.decrypt(message.first, 1), 1);
-}
-
 int main() {
     gmp_randinit_mt(state);
     gmp_randseed_ui(state, time(0));
     CA = new CertificateAuthority();
     User a(123), b(256);
-    string vignereKey = "dgsefgfhrtrdgjhrtsgnbjasbdobsogf";
+    string vignereKey = "abcdefghijklmno";
     a.setVignereKey(vignereKey); b.setVignereKey(vignereKey);
-    string msg; cin>>msg;
-    pair<string, string> c = a.encrypt(msg, b);
-    cout << b.decrypt(c, a) << "\n";
-    c = b.encrypt(msg, a);
-    cout<< a.decrypt(c, b) << "\n";
+    string msg; cin >> msg;
+    pair<string, string> c = a.encrypt(msg, b.getID());
+    cout << b.decrypt(c, a.getID()) << "\n";
+    c = b.encrypt(msg, a.getID());
+    cout<< a.decrypt(c, b.getID()) << "\n";
     return 0;
 }
