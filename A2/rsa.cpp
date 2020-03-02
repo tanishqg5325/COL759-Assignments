@@ -178,16 +178,12 @@ class CertificationAuthority;
 
 class User {
     int id;         // identity of user
-    publicKey pk;   // public key
     secretKey sk;   // secret key
-    string vignereKey;
 public:
     User(int);
     int getID() const {return id;};
-    publicKey getPublicKey() const {return pk;}
-    void setVignereKey(string key) {vignereKey = key;}
-    pair<string, string> encrypt(string, int) const;
-    string decrypt(pair<string, string>, int) const;
+    string encrypt(string, string, int) const;
+    string decrypt(string, int) const;
 };
 
 class CertificateAuthority {
@@ -197,43 +193,55 @@ class CertificateAuthority {
 public:
     CertificateAuthority();
     publicKey getPublicKey() const {return pk;};
-    void registerUser(User u);
+    secretKey registerUser(User u);
     publicKey getPublicKeyOfUser(int);
 } *CA;
 
 User::User(int id) {
     this->id = id;
-    pair<publicKey, secretKey> key = generateKey(128);
-    this->pk = key.first;
-    this->sk = key.second;
-    CA->registerUser(*this);
+    this->sk = CA->registerUser(*this);
 }
 
-pair<string, string> User::encrypt(string message, int b_id) const {
-    int blockSize = getBlockSize(pk.get_n());
-    if(message.size() % blockSize > 0)
-        message += string(blockSize - message.size() % blockSize, 'x');
+string number_to_string(int n) {
+    string ans = "";
+    while(n) {
+        ans += 'a' + (n % 10);
+        n /= 10;
+    }
+    reverse(ans.begin(), ans.end());
+    return ans;
+}
+
+int string_to_number(string s) {
+    int ans = 0;
+    for(char c : s)
+        ans = ans * 10 + (c - 'a');
+    return ans;
+}
+
+string User::encrypt(string message, string vignereKey, int b_id) const {
     publicKey pkCA = CA->getPublicKey();
     publicKey pkb = CA->getPublicKeyOfUser(b_id);
     publicKey pkb_actual(pkCA.encrypt(pkb.get_n()), pkCA.encrypt(pkb.get_e()));
-    message = encryptVignere(message, vignereKey);
-    return {
-        pkb_actual.encrypt(sk.decrypt(message, 0), 0), 
-        pkb_actual.encrypt(sk.decrypt(vignereKey, 0), 0)
-    };
+    message = number_to_string(vignereKey.size()) + 'x' + number_to_string(message.size()) + 'x' + vignereKey + encryptVignere(message, vignereKey);
+    return pkb_actual.encrypt(sk.decrypt(message, 0), 0);
 }
 
-string User::decrypt(pair<string, string> message, int a_id) const {
+string User::decrypt(string message, int a_id) const {
     publicKey pkCA = CA->getPublicKey();
     publicKey pka = CA->getPublicKeyOfUser(a_id);
     publicKey pka_actual(pkCA.encrypt(pka.get_n()), pkCA.encrypt(pka.get_e()));
-    string decryptedVignereKey = pka_actual.encrypt(sk.decrypt(message.second, 1), 1);
-    string originalVignereKey = vignereKey + string(decryptedVignereKey.size()-vignereKey.size(), 'x');
-    if(decryptedVignereKey != originalVignereKey) {
-        cout << "Something is wrong !!\n";
-        exit(0);
-    }
-    return decryptVignere(pka_actual.encrypt(sk.decrypt(message.first, 1), 1), vignereKey);
+    message = pka_actual.encrypt(sk.decrypt(message, 1), 1);
+    int pos = -1, new_pos = -1;
+    for(int i=0;i<message.size();i++)
+        if(message[i] == 'x') {pos = i; break;}
+    int vignereKeyLength = string_to_number(message.substr(0, pos));
+    for(int i=pos+1;i<message.size();i++)
+        if(message[i] == 'x') {new_pos = i; break;}
+    int messageLength = string_to_number(message.substr(pos+1, new_pos-pos-1));
+    string vignereKey = message.substr(new_pos+1, vignereKeyLength);
+    message = message.substr(new_pos+vignereKeyLength+1, messageLength);
+    return decryptVignere(message, vignereKey);
 }
 
 CertificateAuthority::CertificateAuthority() {
@@ -242,12 +250,16 @@ CertificateAuthority::CertificateAuthority() {
     this->sk = key.second;
 }
 
-void CertificateAuthority::registerUser(User u) {
+secretKey CertificateAuthority::registerUser(User u) {
     if(table.find(u.getID()) != table.end()) {
         throw "This ID is already with another user !";
         exit(0);
     }
-    else table[u.getID()] = u.getPublicKey();
+    else {
+        pair<publicKey, secretKey> key = generateKey(128);
+        table[u.getID()] = publicKey(sk.decrypt(key.first.get_n()), sk.decrypt(key.first.get_e()));
+        return key.second;
+    }
 }
 
 publicKey CertificateAuthority::getPublicKeyOfUser(int id) {
@@ -255,11 +267,7 @@ publicKey CertificateAuthority::getPublicKeyOfUser(int id) {
         throw "No such user !";
         exit(0);
     }
-    else {
-        publicKey pkU = table[id];
-        publicKey ans(sk.decrypt(pkU.get_n()), sk.decrypt(pkU.get_e()));
-        return ans;
-    }
+    else return table[id];
 }
 
 int main() {
@@ -267,12 +275,11 @@ int main() {
     gmp_randseed_ui(state, time(0));
     CA = new CertificateAuthority();
     User a(123), b(256);
-    string vignereKey = "afeshadfkaklnljabvlbdfsn";
-    a.setVignereKey(vignereKey); b.setVignereKey(vignereKey);
+    string vignereKey = "afeshadfkaklnljabjdsvhkjdfhsjgvbsduofvvlbdfsn";
     string msg; cin >> msg;
-    pair<string, string> c = a.encrypt(msg, b.getID());
+    string c = a.encrypt(msg, vignereKey, b.getID());
     cout << b.decrypt(c, a.getID()) << "\n";
-    c = b.encrypt(msg, a.getID());
+    c = b.encrypt(msg, vignereKey, a.getID());
     cout<< a.decrypt(c, b.getID()) << "\n";
     return 0;
 }
