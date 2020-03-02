@@ -93,7 +93,7 @@ string publicKey::encrypt(string plainText, int a) const {
         for(int j=i;j<i+blockSize+a;j++) {
             M *= 26;
             if(j < plainText.size()) M += plainText[j] - 'a';
-            else M += 'x' - 'a';
+            else M += rand() % 26;
         }
         mpz_powm(M.get_mpz_t(), M.get_mpz_t(), e.get_mpz_t(), n.get_mpz_t());
         for(int j=0;j<blockSize+1-a;j++) {
@@ -141,7 +141,7 @@ string secretKey::decrypt(string cipherText, int a) const {
         mpz_class M = 0, pow_26 = 1, tmp;
         for(int j=i;j<i+blockSize+a;j++) {
             if(j < cipherText.size()) M += pow_26 * (cipherText[j] - 'a');
-            else M += pow_26 * ('x' - 'a');
+            else M += pow_26 * rand() % 26;
             pow_26 *= 26;
         }
         M = powerCRT(M);
